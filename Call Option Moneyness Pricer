@@ -3,39 +3,38 @@ import numpy as np
 from scipy.stats import norm
 import os
 
-# Paths to data files with separator ';'
+# Paths to data
 spot_path = "///.csv"
 iv_path = "///.csv"
 dividend_path = "///.csv"
 rfr_path = "///.csv"
 
-# Read dataframes
+# Reading CSVs
 spot_df = pd.read_csv(spot_path, index_col=0, parse_dates=True, sep=";")
 iv_df = pd.read_csv(iv_path, index_col=0, parse_dates=True, sep=";")
 dividend_df = pd.read_csv(dividend_path, index_col=0, parse_dates=True, sep=";")
 rfr_df = pd.read_csv(rfr_path, index_col=0, parse_dates=True, sep=";")
 
-# Replace commas with periods in all dataframes
+#Optional
 for df in [spot_df, iv_df, dividend_df, rfr_df]:
     df.replace(',', '.', regex=True, inplace=True)
     df = df.astype(float, errors='ignore')
 
-# Convert date formats to a unified format, handling invalid dates with errors='coerce'
-# For NDX_Prices and RFR (month first: MM/DD/YYYY)
+# Optional
 spot_df.index = pd.to_datetime(spot_df.index, format='%m/%d/%Y', errors='coerce')
 rfr_df.index = pd.to_datetime(rfr_df.index, format='%m/%d/%Y', errors='coerce')
 
-# For IV and Dividend (day first: DD/MM/YYYY)
+
 iv_df.index = pd.to_datetime(iv_df.index, format='%d/%m/%Y', errors='coerce')
 dividend_df.index = pd.to_datetime(dividend_df.index, format='%d/%m/%Y', errors='coerce')
 
-# Drop rows where the index is NaT (invalid dates) in any DataFrame
+# Cleaning
 spot_df = spot_df[spot_df.index.notna()]
 rfr_df = rfr_df[rfr_df.index.notna()]
 iv_df = iv_df[iv_df.index.notna()]
 dividend_df = dividend_df[dividend_df.index.notna()]
 
-# Filter DataFrames to include only data from 2020 onwards
+# Filter date
 start_date = pd.to_datetime('2020-01-01')
 spot_df = spot_df[spot_df.index >= start_date]
 rfr_df = rfr_df[rfr_df.index >= start_date]
@@ -57,71 +56,71 @@ def black_scholes_call(S, K, T, r, q, sigma):
     call_price = S * np.exp(-q * T) * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
     return call_price
 
-# Time to maturity (30 days in years)
+# Time to maturity
 T = 30 / 365.0
 
 # Moneyness (100% = ATM)
 M = 95%
 
-# Create a new DataFrame for call prices
+
 tickers = spot_df.columns
 call_price_df = pd.DataFrame(index=spot_df.index, columns=tickers)
 
-# Align all DataFrames by index (intersection of dates)
+
 common_dates = spot_df.index.intersection(iv_df.index).intersection(dividend_df.index).intersection(rfr_df.index)
 call_price_df = call_price_df.loc[common_dates]
 
-# Compute call prices for each ticker and each day
+
 for date in common_dates:
     for ticker in tickers:
-        # Get spot price
+        
         S = spot_df.loc[date, ticker]
-        # Get implied volatility
+        
         sigma = iv_df.loc[date, ticker] if ticker in iv_df.columns else np.nan
-        # Convert sigma to float if necessary
+        
         try:
             sigma = float(sigma) if not pd.isna(sigma) else np.nan
         except (ValueError, TypeError):
             sigma = np.nan
-        # Get dividend yield (replace NaN with 0)
+        
         q = dividend_df.loc[date, ticker] if ticker in dividend_df.columns else 0
-        # Convert q to float if necessary
+        
         try:
             q = float(q) if not pd.isna(q) else 0
         except (ValueError, TypeError):
             q = 0
-        # Get risk-free rate (same for all tickers, column name 'USGG1M_Index')
+        
         r = rfr_df.loc[date, 'USGG1M_Index']
-        # Convert r to float if necessary
+        
         try:
             r = float(r) if not pd.isna(r) else np.nan
         except (ValueError, TypeError):
             r = np.nan
         
-        # Check for NaN in spot price or implied volatility
+        
         if pd.isna(S) or pd.isna(sigma) or pd.isna(r):
             call_price_df.loc[date, ticker] = np.nan
         else:
-            # Compute call price 
+        
             K = S * M
             # Convert rates to continuous if they are in percentage
             r_continuous = np.log(1 + r / 100) if r > 0 else r / 100
             q_continuous = np.log(1 + q / 100) if q > 0 else q / 100
             sigma_decimal = sigma / 100  # Convert IV from percentage to decimal
             
-            # Compute call price using Black-Scholes
+        
             call_price = black_scholes_call(S, K, T, r_continuous, q_continuous, sigma_decimal)
             call_price_df.loc[date, ticker] = call_price
 
-# Display the resulting DataFrame
+# Optional
 print("ATM Call 30D Prices DataFrame (from 2020 onwards):")
 print(call_price_df.head())
 
-# Save the DataFrame to a CSV file
+# Save the DataFrame to a CSV 
 output_dir = ".../Output"
 output_path = os.path.join(output_dir, "NDX_ATM_Call30D_Prices_2020.csv")
 
-# Create the directory if it doesn't exist
+# Optional
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
     print(f"Created directory: {output_dir}")

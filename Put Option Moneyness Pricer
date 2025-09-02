@@ -3,39 +3,38 @@ import numpy as np
 from scipy.stats import norm
 import os
 
-# Paths to data files with separator ';'
+# Paths to data 
 spot_path = "///.csv"
 iv_path = "///.csv"
 dividend_path = "///.csv"
 rfr_path = "///.csv"
 
-# Read dataframes
+# Read CSVs
 spot_df = pd.read_csv(spot_path, index_col=0, parse_dates=True, sep=";")
 iv_df = pd.read_csv(iv_path, index_col=0, parse_dates=True, sep=";")
 dividend_df = pd.read_csv(dividend_path, index_col=0, parse_dates=True, sep=";")
 rfr_df = pd.read_csv(rfr_path, index_col=0, parse_dates=True, sep=";")
 
-# Replace commas with periods in all dataframes
+# Optional
 for df in [spot_df, iv_df, dividend_df, rfr_df]:
     df.replace(',', '.', regex=True, inplace=True)
     df = df.astype(float, errors='ignore')
 
-# Convert date formats to a unified format, handling invalid dates with errors='coerce'
-# For NDX_Prices and RFR (month first: MM/DD/YYYY)
+# Optional
 spot_df.index = pd.to_datetime(spot_df.index, format='%m/%d/%Y', errors='coerce')
 rfr_df.index = pd.to_datetime(rfr_df.index, format='%m/%d/%Y', errors='coerce')
 
-# For IV and Dividend (day first: DD/MM/YYYY)
+
 iv_df.index = pd.to_datetime(iv_df.index, format='%d/%m/%Y', errors='coerce')
 dividend_df.index = pd.to_datetime(dividend_df.index, format='%d/%m/%Y', errors='coerce')
 
-# Drop rows where the index is NaT (invalid dates) in any DataFrame
+# Clean the data
 spot_df = spot_df[spot_df.index.notna()]
 rfr_df = rfr_df[rfr_df.index.notna()]
 iv_df = iv_df[iv_df.index.notna()]
 dividend_df = dividend_df[dividend_df.index.notna()]
 
-# Filter DataFrames to include only data between start_date and end_date
+# Date filter (to change as input)
 start_date = pd.to_datetime('2020-01-01')
 end_date = pd.to_datetime('2025-12-31')  # Example end date, adjust as needed
 spot_df = spot_df[(spot_df.index >= start_date) & (spot_df.index <= end_date)]
@@ -58,17 +57,16 @@ def black_scholes_put(S, K, T, r, q, sigma):
     put_price = K * np.exp(-r * T) * norm.cdf(-d2) - S * np.exp(-q * T) * norm.cdf(-d1)
     return put_price
 
-# Time to maturity (30 days in years)
+# Time to maturity 
 T = 30 / 365.0
 
 # Moneyness (100% = ATM)
 M = 87.5%
 
-# Create a new DataFrame for put prices
+# Create a new df for put prices
 tickers = spot_df.columns
 put_price_df = pd.DataFrame(index=spot_df.index, columns=tickers)
 
-# Align all DataFrames by index (intersection of dates)
 common_dates = spot_df.index.intersection(iv_df.index).intersection(dividend_df.index).intersection(rfr_df.index)
 put_price_df = put_price_df.loc[common_dates]
 
@@ -103,26 +101,25 @@ for date in common_dates:
         if pd.isna(S) or pd.isna(sigma) or pd.isna(r):
             put_price_df.loc[date, ticker] = np.nan
         else:
-            # Compute put price 
+             
             K = S * M
-            # Convert rates to continuous if they are in percentage
+            
             r_continuous = np.log(1 + r / 100) if r > 0 else r / 100
             q_continuous = np.log(1 + q / 100) if q > 0 else q / 100
-            sigma_decimal = sigma / 100  # Convert IV from percentage to decimal
+            sigma_decimal = sigma / 100 
             
-            # Compute put price using Black-Scholes
             put_price = black_scholes_put(S, K, T, r_continuous, q_continuous, sigma_decimal)
             put_price_df.loc[date, ticker] = put_price
 
-# Save the DataFrame to a CSV file
+# Save df
 output_dir = "///Output"
 output_path = os.path.join(output_dir, "NDX_OTM_Put30D_Prices_875Moneyness_2020_2025.csv")
 
-# Create the directory if it doesn't exist
+# Optional
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
     print(f"Created directory: {output_dir}")
 
-# Save the DataFrame to CSV
+# Save the df to csv
 put_price_df.to_csv(output_path, sep=";", decimal=".", index=True)
 print(f"DataFrame saved to {output_path}")
